@@ -171,7 +171,7 @@ const OwnerDashboardViewInner: React.FC<OwnerDashboardViewProps> = ({
             {formatCurrency(totalGmvCents, 'CHF')}
           </div>
           <div className="text-xs text-[#8A8A8A] font-mono">
-            <span className="text-[#E62B1E] font-bold">{activeBookings.length}</span> Active / Completed Flights
+            <span className="text-[#E62B1E] font-bold">{kpis.activeCount}</span> Active / Completed Flights
           </div>
         </div>
 
