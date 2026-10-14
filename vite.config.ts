@@ -16,6 +16,11 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    optimizeDeps: {
+      // Keep the 10MB self-contained artifact out of the dev dependency scan.
+      // It is opened directly in a browser or served statically, never by Vite.
+      entries: ['index.html'],
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
