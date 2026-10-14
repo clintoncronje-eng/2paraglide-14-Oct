@@ -1,0 +1,37 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@layer base {
+  :root {
+    --font-display: 'Syne', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --font-sans: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --bg-primary: #111111;
+    --accent-crimson: #E62B1E;
+    --text-primary: #FFFFFF;
+    --text-secondary: #8A8A8A;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: #FFFFFF;
+    background-color: #111111;
+    letter-spacing: 0.01em;
+  }
+
+  h1, .font-display {
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-wrap: balance;
+  }
+
+  h2, h3, h4 {
+    font-family: var(--font-sans);
+    text-wrap: balance;
+  }
+
+  .font-mono, .tabular-nums {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}

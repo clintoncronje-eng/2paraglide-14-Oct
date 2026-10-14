@@ -1,0 +1,595 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net: Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Global Hardened Primitives
+    // =========================================================================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Zero-lookup admin check for list queries (Pillar 8 Cost-Optimization Clause)
+    function isBootstrappedOwner() {
+      return isVerifiedUser() && request.auth.token.email == 'clintoncronje@me.com';
+    }
+
+    // Full admin check for single-document operations
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'clintoncronje@me.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // =========================================================================
+    // Validation Blueprints (Pillar 2: Anti-Update-Gap)
+    // =========================================================================
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+        'uid', 'displayName', 'role', 'countryCode',
+        'shvLicense', 'partnerCode', 'verified', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid', 'displayName', 'role', 'countryCode',
+        'shvLicense', 'partnerCode', 'verified', 'createdAt', 'updatedAt'
+      ]) &&
+      data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+      data.role is string && data.role.size() <= 20 && data.role in ['flyer', 'pilot', 'partner', 'owner'] &&
+      data.countryCode is string && data.countryCode.size() == 2 && data.countryCode.matches('^[A-Z]{2}$') &&
+      data.shvLicense is string && data.shvLicense.size() <= 40 &&
+      data.partnerCode is string && data.partnerCode.size() <= 40 &&
+      data.verified is bool &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidFlightSlot(data) {
+      return data.keys().hasAll([
+        'slotId', 'pilotId', 'pilotName', 'shvLicense', 'locationName',
+        'countryCode', 'launchAltitudeM', 'flightDate', 'flightTime',
+        'priceCents', 'currency', 'weatherStatus', 'status', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'slotId', 'pilotId', 'pilotName', 'shvLicense', 'locationName',
+        'countryCode', 'launchAltitudeM', 'flightDate', 'flightTime',
+        'priceCents', 'currency', 'weatherStatus', 'status', 'createdAt', 'updatedAt'
+      ]) &&
+      data.slotId is string && data.slotId.size() >= 1 && data.slotId.size() <= 128 && data.slotId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.pilotId is string && data.pilotId.size() >= 1 && data.pilotId.size() <= 128 && data.pilotId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.pilotName is string && data.pilotName.size() >= 1 && data.pilotName.size() <= 80 &&
+      data.shvLicense is string && data.shvLicense.size() >= 3 && data.shvLicense.size() <= 40 &&
+      data.locationName is string && data.locationName.size() >= 1 && data.locationName.size() <= 80 &&
+      data.countryCode is string && data.countryCode.size() == 2 && data.countryCode.matches('^[A-Z]{2}$') &&
+      data.launchAltitudeM is number && data.launchAltitudeM >= 100 && data.launchAltitudeM <= 5000 &&
+      data.flightDate is string && data.flightDate.size() >= 10 && data.flightDate.size() <= 20 &&
+      data.flightTime is string && data.flightTime.size() >= 4 && data.flightTime.size() <= 10 &&
+      data.priceCents is number && data.priceCents >= 5000 && data.priceCents <= 200000 &&
+      data.currency is string && data.currency.size() <= 5 && data.currency in ['CHF', 'EUR'] &&
+      data.weatherStatus is string && data.weatherStatus.size() <= 15 && data.weatherStatus in ['optimal', 'marginal', 'hold', 'risky', 'unsafe'] &&
+      data.status is string && data.status.size() <= 15 && data.status in ['available', 'booked', 'completed', 'cancelled'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasAll([
+        'bookingId', 'flyerId', 'flyerName', 'pilotId', 'pilotName',
+        'partnerCode', 'locationName', 'countryCode', 'flightDate', 'flightTime',
+        'currency', 'totalAmountCents', 'platformFeeCents', 'pilotPayoutCents',
+        'partnerCommissionCents', 'paymentMethod', 'status', 'mediaIncluded',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'bookingId', 'flyerId', 'flyerName', 'pilotId', 'pilotName',
+        'partnerCode', 'locationName', 'countryCode', 'flightDate', 'flightTime',
+        'currency', 'totalAmountCents', 'platformFeeCents', 'pilotPayoutCents',
+        'partnerCommissionCents', 'paymentMethod', 'status', 'mediaIncluded',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.bookingId is string && data.bookingId.size() >= 1 && data.bookingId.size() <= 128 && data.bookingId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.flyerId is string && data.flyerId.size() >= 1 && data.flyerId.size() <= 128 && data.flyerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.flyerName is string && data.flyerName.size() >= 1 && data.flyerName.size() <= 80 &&
+      data.pilotId is string && data.pilotId.size() >= 1 && data.pilotId.size() <= 128 && data.pilotId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.pilotName is string && data.pilotName.size() >= 1 && data.pilotName.size() <= 80 &&
+      data.partnerCode is string && data.partnerCode.size() >= 1 && data.partnerCode.size() <= 40 && data.partnerCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.locationName is string && data.locationName.size() >= 1 && data.locationName.size() <= 80 &&
+      data.countryCode is string && data.countryCode.size() == 2 && data.countryCode.matches('^[A-Z]{2}$') &&
+      data.flightDate is string && data.flightDate.size() >= 10 && data.flightDate.size() <= 20 &&
+      data.flightTime is string && data.flightTime.size() >= 4 && data.flightTime.size() <= 10 &&
+      data.currency is string && data.currency.size() <= 5 && data.currency in ['CHF', 'EUR'] &&
+      data.totalAmountCents is number && data.totalAmountCents >= 5000 && data.totalAmountCents <= 250000 &&
+      data.platformFeeCents is number && data.platformFeeCents >= 0 &&
+      data.pilotPayoutCents is number && data.pilotPayoutCents >= 0 &&
+      data.partnerCommissionCents is number && data.partnerCommissionCents >= 0 &&
+      (data.platformFeeCents + data.pilotPayoutCents + data.partnerCommissionCents == data.totalAmountCents) &&
+      data.paymentMethod is string && data.paymentMethod.size() <= 20 && data.paymentMethod in ['TWINT', 'CARD_3DS', 'APPLE_PAY', 'SEPA'] &&
+      data.status is string && data.status.size() <= 15 && data.status in ['confirmed', 'completed', 'cancelled'] &&
+      data.mediaIncluded is bool &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidQrCampaign(data) {
+      return data.keys().hasAll([
+        'campaignId', 'ownerId', 'partnerName', 'partnerType', 'partnerCode',
+        'region', 'countryCode', 'commissionBps', 'scansCount', 'bookingsCount',
+        'status', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'campaignId', 'ownerId', 'partnerName', 'partnerType', 'partnerCode',
+        'region', 'countryCode', 'commissionBps', 'scansCount', 'bookingsCount',
+        'status', 'createdAt', 'updatedAt'
+      ]) &&
+      data.campaignId is string && data.campaignId.size() >= 1 && data.campaignId.size() <= 128 && data.campaignId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.partnerName is string && data.partnerName.size() >= 1 && data.partnerName.size() <= 80 &&
+      data.partnerType is string && data.partnerType.size() <= 30 && data.partnerType in ['Hotel', 'Coffee Shop', 'Tourism Board', 'Hostel', 'Mountain Railway'] &&
+      data.partnerCode is string && data.partnerCode.size() >= 3 && data.partnerCode.size() <= 40 && data.partnerCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.region is string && data.region.size() >= 1 && data.region.size() <= 60 &&
+      data.countryCode is string && data.countryCode.size() == 2 && data.countryCode.matches('^[A-Z]{2}$') &&
+      data.commissionBps is number && data.commissionBps >= 0 && data.commissionBps <= 3000 &&
+      data.scansCount is number && data.scansCount >= 0 &&
+      data.bookingsCount is number && data.bookingsCount >= 0 &&
+      data.status is string && data.status.size() <= 15 && data.status in ['active', 'paused', 'archived'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidPilotPublicProfile(data) {
+      return data.keys().hasAll([
+        'pilotId', 'companyName', 'tagline', 'bio', 'headquarters',
+        'countryCode', 'publicEmail', 'publicPhone', 'websiteUrl',
+        'uidVatNumber', 'insuranceProvider', 'policyNumber', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'pilotId', 'companyName', 'tagline', 'bio', 'headquarters',
+        'countryCode', 'publicEmail', 'publicPhone', 'websiteUrl',
+        'uidVatNumber', 'insuranceProvider', 'policyNumber', 'updatedAt'
+      ]) &&
+      data.pilotId is string && data.pilotId.size() >= 1 && data.pilotId.size() <= 128 && data.pilotId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 100 &&
+      data.tagline is string && data.tagline.size() >= 1 && data.tagline.size() <= 140 &&
+      data.bio is string && data.bio.size() >= 1 && data.bio.size() <= 1200 &&
+      data.headquarters is string && data.headquarters.size() >= 1 && data.headquarters.size() <= 120 &&
+      data.countryCode is string && data.countryCode.size() == 2 && data.countryCode.matches('^[A-Z]{2}$') &&
+      data.publicEmail is string && data.publicEmail.size() >= 3 && data.publicEmail.size() <= 100 &&
+      data.publicPhone is string && data.publicPhone.size() >= 3 && data.publicPhone.size() <= 40 &&
+      data.websiteUrl is string && data.websiteUrl.size() >= 3 && data.websiteUrl.size() <= 120 &&
+      data.uidVatNumber is string && data.uidVatNumber.size() >= 2 && data.uidVatNumber.size() <= 40 &&
+      data.insuranceProvider is string && data.insuranceProvider.size() >= 2 && data.insuranceProvider.size() <= 80 &&
+      data.policyNumber is string && data.policyNumber.size() >= 2 && data.policyNumber.size() <= 60 &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidPilotBankingPrivate(data) {
+      return data.keys().hasAll([
+        'pilotId', 'accountHolderName', 'iban', 'bicSwift',
+        'bankName', 'settlementCurrency', 'payoutSchedule', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'pilotId', 'accountHolderName', 'iban', 'bicSwift',
+        'bankName', 'settlementCurrency', 'payoutSchedule', 'updatedAt'
+      ]) &&
+      data.pilotId is string && data.pilotId.size() >= 1 && data.pilotId.size() <= 128 && data.pilotId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.accountHolderName is string && data.accountHolderName.size() >= 2 && data.accountHolderName.size() <= 100 &&
+      data.iban is string && data.iban.size() >= 10 && data.iban.size() <= 42 &&
+      data.bicSwift is string && data.bicSwift.size() >= 6 && data.bicSwift.size() <= 16 &&
+      data.bankName is string && data.bankName.size() >= 2 && data.bankName.size() <= 80 &&
+      data.settlementCurrency is string && data.settlementCurrency.size() <= 5 && data.settlementCurrency in ['CHF', 'EUR'] &&
+      data.payoutSchedule is string && data.payoutSchedule.size() <= 20 && data.payoutSchedule in ['T+1_ESCROW', 'WEEKLY_FRIDAY', 'MONTHLY'] &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidDigitalWaiver(data) {
+      return data.keys().hasAll([
+        'waiverId', 'bookingId', 'flyerId', 'flyerName', 'pilotId', 'pilotName',
+        'locationName', 'flightDate', 'dateOfBirth', 'emergencyContactName',
+        'emergencyContactPhone', 'medicalDeclarationConfirmed',
+        'riskAcknowledgmentConfirmed', 'thirdPartyLiabilityConfirmed',
+        'signatureType', 'signatureData', 'status', 'signedAt',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'waiverId', 'bookingId', 'flyerId', 'flyerName', 'pilotId', 'pilotName',
+        'locationName', 'flightDate', 'dateOfBirth', 'emergencyContactName',
+        'emergencyContactPhone', 'medicalDeclarationConfirmed',
+        'riskAcknowledgmentConfirmed', 'thirdPartyLiabilityConfirmed',
+        'signatureType', 'signatureData', 'status', 'signedAt',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.waiverId is string && data.waiverId.size() >= 1 && data.waiverId.size() <= 128 && data.waiverId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.bookingId is string && data.bookingId.size() >= 1 && data.bookingId.size() <= 128 && data.bookingId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.flyerId is string && data.flyerId.size() >= 1 && data.flyerId.size() <= 128 && data.flyerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.flyerName is string && data.flyerName.size() >= 1 && data.flyerName.size() <= 80 &&
+      data.pilotId is string && data.pilotId.size() >= 1 && data.pilotId.size() <= 128 && data.pilotId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.pilotName is string && data.pilotName.size() >= 1 && data.pilotName.size() <= 80 &&
+      data.locationName is string && data.locationName.size() >= 1 && data.locationName.size() <= 80 &&
+      data.flightDate is string && data.flightDate.size() >= 10 && data.flightDate.size() <= 20 &&
+      data.dateOfBirth is string && data.dateOfBirth.size() >= 8 && data.dateOfBirth.size() <= 20 &&
+      data.emergencyContactName is string && data.emergencyContactName.size() >= 1 && data.emergencyContactName.size() <= 80 &&
+      data.emergencyContactPhone is string && data.emergencyContactPhone.size() >= 4 && data.emergencyContactPhone.size() <= 40 &&
+      data.medicalDeclarationConfirmed is bool &&
+      data.riskAcknowledgmentConfirmed is bool &&
+      data.thirdPartyLiabilityConfirmed is bool &&
+      data.signatureType is string && data.signatureType in ['draw', 'typed'] &&
+      data.signatureData is string && data.signatureData.size() >= 2 && data.signatureData.size() <= 50000 &&
+      data.status is string && data.status in ['signed', 'pending'] &&
+      data.signedAt is string && data.signedAt.size() >= 5 && data.signedAt.size() <= 40 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection 1: /admins/{adminId}
+    // =========================================================================
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && request.auth.uid == adminId;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // =========================================================================
+    // Collection 2: /users/{userId}
+    // =========================================================================
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isBootstrappedOwner());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().uid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          (incoming().role in ['flyer', 'pilot', 'partner'] && incoming().verified == false) ||
+          isAdmin()
+        );
+
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Action 1: Self-profile update (cannot self-promote to owner or self-verify)
+          (
+            request.auth.uid == userId &&
+            incoming().verified == existing().verified &&
+            incoming().role in ['flyer', 'pilot', 'partner'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'role', 'countryCode', 'shvLicense', 'partnerCode', 'updatedAt'
+            ])
+          ) ||
+          // Action 2: Platform Owner / Admin full governance
+          isAdmin()
+        );
+
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // =========================================================================
+    // Collection 3: /flightSlots/{slotId}
+    // =========================================================================
+    match /flightSlots/{slotId} {
+      allow get: if isValidId(slotId) && (resource.data.status == 'available' || (isSignedIn() && (resource.data.pilotId == request.auth.uid || isAdmin())));
+      allow list: if resource.data.status == 'available' || (isSignedIn() && (resource.data.pilotId == request.auth.uid || isBootstrappedOwner()));
+
+      allow create: if isVerifiedUser() &&
+        isValidId(slotId) &&
+        isValidFlightSlot(incoming()) &&
+        incoming().slotId == slotId &&
+        incoming().pilotId == request.auth.uid &&
+        incoming().status == 'available' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(slotId) &&
+        isValidFlightSlot(incoming()) &&
+        incoming().slotId == existing().slotId &&
+        incoming().pilotId == existing().pilotId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Terminal state lock: once completed or cancelled, only admin can mutate
+          (
+            existing().status in ['available', 'booked'] &&
+            (
+              // Action 1: Pilot updates weather or status or schedule
+              (
+                existing().pilotId == request.auth.uid &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'weatherStatus', 'status', 'priceCents', 'flightDate', 'flightTime', 'updatedAt'
+                ])
+              ) ||
+              // Action 2: Flyer reserves an available slot
+              (
+                existing().status == 'available' &&
+                incoming().status == 'booked' &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+              )
+            )
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(slotId) && (
+        (existing().pilotId == request.auth.uid && existing().status == 'available') ||
+        isAdmin()
+      );
+    }
+
+    // =========================================================================
+    // Collection 4: /bookings/{bookingId}
+    // =========================================================================
+    match /bookings/{bookingId} {
+      allow get: if isSignedIn() && isValidId(bookingId) && (
+        resource.data.flyerId == request.auth.uid ||
+        resource.data.pilotId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow list: if isSignedIn() && (
+        resource.data.flyerId == request.auth.uid ||
+        resource.data.pilotId == request.auth.uid ||
+        isBootstrappedOwner()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(bookingId) &&
+        isValidBooking(incoming()) &&
+        incoming().bookingId == bookingId &&
+        incoming().flyerId == request.auth.uid &&
+        incoming().status == 'confirmed' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(bookingId) &&
+        isValidBooking(incoming()) &&
+        incoming().bookingId == existing().bookingId &&
+        incoming().flyerId == existing().flyerId &&
+        incoming().pilotId == existing().pilotId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Terminal state lock: only confirmed bookings can transition to completed or cancelled
+          (
+            existing().status == 'confirmed' &&
+            (
+              // Action 1: Pilot marks flight completed or cancelled
+              (
+                existing().pilotId == request.auth.uid &&
+                incoming().status in ['completed', 'cancelled'] &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+              ) ||
+              // Action 2: Flyer cancels confirmed booking
+              (
+                existing().flyerId == request.auth.uid &&
+                incoming().status == 'cancelled' &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+              )
+            )
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if isAdmin() && isValidId(bookingId);
+    }
+
+    // =========================================================================
+    // Collection 4.5: /waivers/{waiverId} (Digital Passenger Liability Waivers)
+    // =========================================================================
+    match /waivers/{waiverId} {
+      allow get: if isSignedIn() && isValidId(waiverId) && (
+        resource.data.flyerId == request.auth.uid ||
+        resource.data.pilotId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow list: if isSignedIn() && (
+        resource.data.flyerId == request.auth.uid ||
+        resource.data.pilotId == request.auth.uid ||
+        isBootstrappedOwner()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(waiverId) &&
+        isValidDigitalWaiver(incoming()) &&
+        incoming().waiverId == waiverId &&
+        incoming().flyerId == request.auth.uid &&
+        incoming().status == 'signed' &&
+        incoming().medicalDeclarationConfirmed == true &&
+        incoming().riskAcknowledgmentConfirmed == true &&
+        incoming().thirdPartyLiabilityConfirmed == true &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(waiverId) &&
+        isValidDigitalWaiver(incoming()) &&
+        incoming().waiverId == existing().waiverId &&
+        incoming().bookingId == existing().bookingId &&
+        incoming().flyerId == existing().flyerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            existing().flyerId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'dateOfBirth', 'emergencyContactName', 'emergencyContactPhone',
+              'signatureType', 'signatureData', 'status', 'signedAt', 'updatedAt'
+            ])
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if isAdmin() && isValidId(waiverId);
+    }
+
+    // =========================================================================
+    // Collection 5: /qrCampaigns/{campaignId}
+    // =========================================================================
+    match /qrCampaigns/{campaignId} {
+      allow get: if isValidId(campaignId) && (
+        resource.data.status == 'active' ||
+        (isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin()))
+      );
+
+      allow list: if resource.data.status == 'active' || (
+        isSignedIn() && (resource.data.ownerId == request.auth.uid || isBootstrappedOwner())
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(campaignId) &&
+        isValidQrCampaign(incoming()) &&
+        incoming().campaignId == campaignId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().commissionBps == 1000 &&
+        incoming().scansCount == 0 &&
+        incoming().bookingsCount == 0 &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(campaignId) &&
+        isValidQrCampaign(incoming()) &&
+        incoming().campaignId == existing().campaignId &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().partnerCode == existing().partnerCode &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            existing().status != 'archived' &&
+            (
+              // Action 1: Partner manages campaign state or increments scan/booking counters
+              (
+                existing().ownerId == request.auth.uid &&
+                incoming().commissionBps == existing().commissionBps &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'partnerName', 'region', 'status', 'scansCount', 'bookingsCount', 'updatedAt'
+                ])
+              ) ||
+              // Action 2: Bounded attribution scan/booking counter increment on active campaign
+              (
+                existing().status == 'active' &&
+                incoming().commissionBps == existing().commissionBps &&
+                incoming().scansCount >= existing().scansCount &&
+                incoming().scansCount <= existing().scansCount + 1 &&
+                incoming().bookingsCount >= existing().bookingsCount &&
+                incoming().bookingsCount <= existing().bookingsCount + 1 &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'scansCount', 'bookingsCount', 'updatedAt'
+                ])
+              )
+            )
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if isAdmin() && isValidId(campaignId);
+    }
+
+    // =========================================================================
+    // Collection 6: /pilotProfiles/{pilotId} (Public Profile) & /private/{docId} (Isolated Banking)
+    // =========================================================================
+    match /pilotProfiles/{pilotId} {
+      allow get: if isValidId(pilotId) && resource.data.countryCode in ['CH', 'FR', 'AT', 'IT'];
+      allow list: if resource.data.countryCode in ['CH', 'FR', 'AT', 'IT'];
+
+      allow create: if isVerifiedUser() &&
+        isValidId(pilotId) &&
+        isValidPilotPublicProfile(incoming()) &&
+        incoming().pilotId == pilotId &&
+        incoming().pilotId == request.auth.uid &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(pilotId) &&
+        isValidPilotPublicProfile(incoming()) &&
+        incoming().pilotId == existing().pilotId &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            request.auth.uid == pilotId &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'companyName', 'tagline', 'bio', 'headquarters', 'countryCode',
+              'publicEmail', 'publicPhone', 'websiteUrl', 'uidVatNumber',
+              'insuranceProvider', 'policyNumber', 'updatedAt'
+            ])
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if isAdmin() && isValidId(pilotId);
+
+      // Pillar 6 Split Collection: Banking Details strictly isolated from public profile
+      match /private/{docId} {
+        allow get: if isVerifiedUser() &&
+          isValidId(pilotId) &&
+          isValidId(docId) &&
+          (request.auth.uid == pilotId || isAdmin()) &&
+          exists(/databases/$(database)/documents/pilotProfiles/$(pilotId));
+
+        allow list: if false;
+
+        allow create: if isVerifiedUser() &&
+          isValidId(pilotId) &&
+          isValidId(docId) &&
+          isValidPilotBankingPrivate(incoming()) &&
+          incoming().pilotId == pilotId &&
+          incoming().pilotId == request.auth.uid &&
+          incoming().updatedAt == request.time &&
+          exists(/databases/$(database)/documents/pilotProfiles/$(pilotId));
+
+        allow update: if isVerifiedUser() &&
+          isValidId(pilotId) &&
+          isValidId(docId) &&
+          isValidPilotBankingPrivate(incoming()) &&
+          incoming().pilotId == existing().pilotId &&
+          incoming().updatedAt == request.time &&
+          exists(/databases/$(database)/documents/pilotProfiles/$(pilotId)) &&
+          (
+            (
+              request.auth.uid == pilotId &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'accountHolderName', 'iban', 'bicSwift', 'bankName',
+                'settlementCurrency', 'payoutSchedule', 'updatedAt'
+              ])
+            ) ||
+            isAdmin()
+          );
+
+        allow delete: if isAdmin() && isValidId(pilotId) && isValidId(docId);
+      }
+    }
+  }
+}

@@ -1,0 +1,775 @@
+{
+  "entities": {
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Immutable system administrator registry record.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the administrator."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp."
+        }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Non-PII role and license profile for 2paraglide users (Flyer, Pilot, Partner, Owner).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the user."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Public display name or operator business name."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["flyer", "pilot", "partner", "owner"],
+          "description": "Active workspace role in 2paraglide."
+        },
+        "countryCode": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[A-Z]{2}$",
+          "description": "ISO-2 country code (e.g., CH, FR, AT, IT)."
+        },
+        "shvLicense": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 40,
+          "description": "SHV/FSVL or IPPI tandem certification number for pilots."
+        },
+        "partnerCode": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 40,
+          "description": "Attribution partner code for hotels, cafes, and tourism boards."
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "Whether license/KYC verification is complete."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Profile creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Profile update server timestamp."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "role",
+        "countryCode",
+        "shvLicense",
+        "partnerCode",
+        "verified",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FlightSlot": {
+      "title": "FlightSlot",
+      "description": "Tandem paragliding slot published by a certified pilot.",
+      "type": "object",
+      "properties": {
+        "slotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique slot identifier."
+        },
+        "pilotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the pilot who owns this slot."
+        },
+        "pilotName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Display name of the tandem pilot."
+        },
+        "shvLicense": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40,
+          "description": "SHV/BAZL tandem pilot license identifier."
+        },
+        "locationName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Launch and landing zone name (e.g., Interlaken Beatenberg)."
+        },
+        "countryCode": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[A-Z]{2}$",
+          "description": "ISO-2 country code."
+        },
+        "launchAltitudeM": {
+          "type": "number",
+          "description": "Launch altitude in meters ASL."
+        },
+        "flightDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 20,
+          "description": "ISO date of the flight."
+        },
+        "flightTime": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 10,
+          "description": "Slot departure time (e.g., 10:30)."
+        },
+        "priceCents": {
+          "type": "number",
+          "description": "Flight price in minor currency units (Rappen/Cents)."
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["CHF", "EUR"],
+          "description": "Settlement currency."
+        },
+        "weatherStatus": {
+          "type": "string",
+          "enum": ["optimal", "marginal", "hold", "risky", "unsafe"],
+          "description": "Pilot-assessed Föhn and valley wind status."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["available", "booked", "completed", "cancelled"],
+          "description": "Lifecycle state of the flight slot."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp."
+        }
+      },
+      "required": [
+        "slotId",
+        "pilotId",
+        "pilotName",
+        "shvLicense",
+        "locationName",
+        "countryCode",
+        "launchAltitudeM",
+        "flightDate",
+        "flightTime",
+        "priceCents",
+        "currency",
+        "weatherStatus",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Tandem flight booking with escrow split calculation between Platform, Pilot, and QR Partner.",
+      "type": "object",
+      "properties": {
+        "bookingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique booking identifier."
+        },
+        "flyerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the flyer who created the booking."
+        },
+        "flyerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Passenger name for manifest."
+        },
+        "pilotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the assigned tandem pilot."
+        },
+        "pilotName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Assigned tandem pilot name."
+        },
+        "partnerCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "QR referral partner code or DIRECT."
+        },
+        "locationName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Flight launch location."
+        },
+        "countryCode": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[A-Z]{2}$",
+          "description": "ISO-2 country code."
+        },
+        "flightDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 20,
+          "description": "Scheduled flight date."
+        },
+        "flightTime": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 10,
+          "description": "Scheduled slot time."
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["CHF", "EUR"],
+          "description": "Transaction currency."
+        },
+        "totalAmountCents": {
+          "type": "number",
+          "description": "Gross amount paid by flyer in cents/rappen."
+        },
+        "platformFeeCents": {
+          "type": "number",
+          "description": "Net 2paraglide platform fee in cents/rappen."
+        },
+        "pilotPayoutCents": {
+          "type": "number",
+          "description": "Escrow payout allocated to pilot in cents/rappen."
+        },
+        "partnerCommissionCents": {
+          "type": "number",
+          "description": "Commission allocated to QR partner in cents/rappen."
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["TWINT", "CARD_3DS", "APPLE_PAY", "SEPA"],
+          "description": "Payment gateway instrument used."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["confirmed", "completed", "cancelled"],
+          "description": "Booking lifecycle status."
+        },
+        "mediaIncluded": {
+          "type": "boolean",
+          "description": "Whether GoPro 4K photo/video package is included."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Booking creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Booking update server timestamp."
+        }
+      },
+      "required": [
+        "bookingId",
+        "flyerId",
+        "flyerName",
+        "pilotId",
+        "pilotName",
+        "partnerCode",
+        "locationName",
+        "countryCode",
+        "flightDate",
+        "flightTime",
+        "currency",
+        "totalAmountCents",
+        "platformFeeCents",
+        "pilotPayoutCents",
+        "partnerCommissionCents",
+        "paymentMethod",
+        "status",
+        "mediaIncluded",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "QrCampaign": {
+      "title": "QrCampaign",
+      "description": "Partner QR code campaign used by hotels, coffee shops, and tourism boards to sell flights.",
+      "type": "object",
+      "properties": {
+        "campaignId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique QR campaign identifier."
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the partner who owns this QR campaign."
+        },
+        "partnerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Name of hotel, cafe, or tourism board."
+        },
+        "partnerType": {
+          "type": "string",
+          "enum": ["Hotel", "Coffee Shop", "Tourism Board", "Hostel", "Mountain Railway"],
+          "description": "Partner venue classification."
+        },
+        "partnerCode": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique referral code encoded into the QR URL."
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Alpine region (e.g., Interlaken, Zermatt, Chamonix)."
+        },
+        "countryCode": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[A-Z]{2}$",
+          "description": "ISO-2 country code."
+        },
+        "commissionBps": {
+          "type": "number",
+          "description": "Commission rate in basis points (e.g. 1000 = 10%)."
+        },
+        "scansCount": {
+          "type": "number",
+          "description": "Tracked QR code scans."
+        },
+        "bookingsCount": {
+          "type": "number",
+          "description": "Tracked completed bookings."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "paused", "archived"],
+          "description": "Campaign status."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp."
+        }
+      },
+      "required": [
+        "campaignId",
+        "ownerId",
+        "partnerName",
+        "partnerType",
+        "partnerCode",
+        "region",
+        "countryCode",
+        "commissionBps",
+        "scansCount",
+        "bookingsCount",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PilotPublicProfile": {
+      "title": "PilotPublicProfile",
+      "description": "Publicly published pilot/operator profile (Business Info, Take Off & Landing Spots, Pilots Roster, Media Gallery). Excludes banking and password data.",
+      "type": "object",
+      "properties": {
+        "pilotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the pilot/operator."
+        },
+        "companyName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Public paragliding business or school name."
+        },
+        "tagline": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140,
+          "description": "Short public headline."
+        },
+        "bio": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "Public company overview and safety philosophy."
+        },
+        "headquarters": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Meeting point or office address."
+        },
+        "countryCode": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[A-Z]{2}$",
+          "description": "ISO-2 country code."
+        },
+        "publicEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 100,
+          "description": "Public booking inquiry email."
+        },
+        "publicPhone": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40,
+          "description": "Public flight desk phone."
+        },
+        "websiteUrl": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120,
+          "description": "Operator website URL."
+        },
+        "uidVatNumber": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "description": "Swiss UID/MWST or EU VAT registration number."
+        },
+        "insuranceProvider": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "description": "Aviation liability insurer."
+        },
+        "policyNumber": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60,
+          "description": "Commercial tandem liability policy number."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last public publication server timestamp."
+        }
+      },
+      "required": [
+        "pilotId",
+        "companyName",
+        "tagline",
+        "bio",
+        "headquarters",
+        "countryCode",
+        "publicEmail",
+        "publicPhone",
+        "websiteUrl",
+        "uidVatNumber",
+        "insuranceProvider",
+        "policyNumber",
+        "updatedAt"
+      ]
+    },
+    "PilotBankingPrivate": {
+      "title": "PilotBankingPrivate",
+      "description": "Strictly isolated private banking and payout settlement record (never exposed on public profile).",
+      "type": "object",
+      "properties": {
+        "pilotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the pilot/operator."
+        },
+        "accountHolderName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100,
+          "description": "Beneficiary name on bank account."
+        },
+        "iban": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 42,
+          "description": "CH-IBAN or EU SEPA IBAN for Stripe Connect payouts."
+        },
+        "bicSwift": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 16,
+          "description": "BIC / SWIFT code."
+        },
+        "bankName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "description": "Financial institution name."
+        },
+        "settlementCurrency": {
+          "type": "string",
+          "enum": ["CHF", "EUR"],
+          "description": "Payout currency."
+        },
+        "payoutSchedule": {
+          "type": "string",
+          "enum": ["T+1_ESCROW", "WEEKLY_FRIDAY", "MONTHLY"],
+          "description": "Escrow settlement cadence."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp."
+        }
+      },
+      "required": [
+        "pilotId",
+        "accountHolderName",
+        "iban",
+        "bicSwift",
+        "bankName",
+        "settlementCurrency",
+        "payoutSchedule",
+        "updatedAt"
+      ]
+    },
+    "DigitalWaiver": {
+      "title": "DigitalWaiver",
+      "description": "Passenger liability release and medical declaration signed before flight departure.",
+      "type": "object",
+      "properties": {
+        "waiverId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique identifier for the digital waiver document."
+        },
+        "bookingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Reference booking ID."
+        },
+        "flyerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the signing flyer."
+        },
+        "flyerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Full legal name of the passenger."
+        },
+        "pilotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the tandem pilot."
+        },
+        "pilotName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Name of the tandem pilot."
+        },
+        "locationName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Flight departure area."
+        },
+        "flightDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 20,
+          "description": "Scheduled flight date."
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 20,
+          "description": "Date of birth of the passenger."
+        },
+        "emergencyContactName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Emergency contact full name."
+        },
+        "emergencyContactPhone": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 40,
+          "description": "Emergency contact phone number."
+        },
+        "medicalDeclarationConfirmed": {
+          "type": "boolean",
+          "description": "Passenger self-declaration of fitness to fly."
+        },
+        "riskAcknowledgmentConfirmed": {
+          "type": "boolean",
+          "description": "Passenger acknowledgment of inherent alpine sport risks."
+        },
+        "thirdPartyLiabilityConfirmed": {
+          "type": "boolean",
+          "description": "Passenger acceptance of commercial aviation insurance terms."
+        },
+        "signatureType": {
+          "type": "string",
+          "enum": ["draw", "typed"],
+          "description": "Method used for digital signature."
+        },
+        "signatureData": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 50000,
+          "description": "Signature canvas base64 data URL or cursive typed name."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["signed", "pending"],
+          "description": "Signature status."
+        },
+        "signedAt": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 40,
+          "description": "Human-readable signing timestamp."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Document creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Document last update server timestamp."
+        }
+      },
+      "required": [
+        "waiverId",
+        "bookingId",
+        "flyerId",
+        "flyerName",
+        "pilotId",
+        "pilotName",
+        "locationName",
+        "flightDate",
+        "dateOfBirth",
+        "emergencyContactName",
+        "emergencyContactPhone",
+        "medicalDeclarationConfirmed",
+        "riskAcknowledgmentConfirmed",
+        "thirdPartyLiabilityConfirmed",
+        "signatureType",
+        "signatureData",
+        "status",
+        "signedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": "AdminRecord",
+      "description": "System administrators table for RBAC verification."
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Non-PII user role and license profiles."
+    },
+    "/flightSlots/{slotId}": {
+      "schema": "FlightSlot",
+      "description": "Tandem paragliding availability slots created by pilots."
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Flight bookings linking flyers, pilots, and QR partners."
+    },
+    "/waivers/{waiverId}": {
+      "schema": "DigitalWaiver",
+      "description": "Passenger digital legal waivers and liability releases before tandem flight."
+    },
+    "/qrCampaigns/{campaignId}": {
+      "schema": "QrCampaign",
+      "description": "Partner QR code referral campaigns for hotels, cafes, and tourism offices."
+    },
+    "/pilotProfiles/{pilotId}": {
+      "schema": "PilotPublicProfile",
+      "description": "Publicly visible pilot/operator business profile, spots, roster, and media."
+    },
+    "/pilotProfiles/{pilotId}/private/{docId}": {
+      "schema": "PilotBankingPrivate",
+      "description": "Isolated private banking and IBAN payout credentials (owner/admin only)."
+    }
+  }
+}

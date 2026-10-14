@@ -1,0 +1,6 @@
+{
+  "name": "2paraglide — Swiss & European Tandem Paragliding Platform",
+  "description": "Multi-role tandem paragliding marketplace, architecture blueprint, payment split engine, and QR partner attribution platform for 2paraglide.com.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
