@@ -1,4 +1,5 @@
-import html2pdf from 'html2pdf.js';
+// Performance: html2pdf bundles html2canvas + jsPDF (~hundreds of KB); load it
+// lazily so it never blocks the initial page bundle.
 import { BookingData, PilotPublicProfileBundle } from '../types';
 import { formatCurrency } from './validation';
 import { GENERATED_ASSETS } from '../data/masterSpecScript';
@@ -224,6 +225,7 @@ export async function generateAndDownloadReceipt(
       }
     };
 
+    const { default: html2pdf } = await import('html2pdf.js');
     await html2pdf().from(container).set(opt).save();
   } finally {
     if (document.body.contains(container)) {
