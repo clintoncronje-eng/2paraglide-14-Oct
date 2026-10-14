@@ -21,7 +21,7 @@ interface MasterScriptViewProps {
   onNavigate: (view: WorkspaceView) => void;
 }
 
-export const MasterScriptView: React.FC<MasterScriptViewProps> = ({ onNavigate }) => {
+const MasterScriptViewInner: React.FC<MasterScriptViewProps> = ({ onNavigate }) => {
   const [activeChapterId, setActiveChapterId] = useState<string>(MASTER_SPEC_CHAPTERS[0].id);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({
     'sec-1': true,
@@ -494,3 +494,6 @@ export const MasterScriptView: React.FC<MasterScriptViewProps> = ({ onNavigate }
     </div>
   );
 };
+
+// Performance: static/lightweight view — memoize to avoid needless re-renders
+export const MasterScriptView = React.memo(MasterScriptViewInner);

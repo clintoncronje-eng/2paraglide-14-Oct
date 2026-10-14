@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import {
   collection,
@@ -62,12 +62,28 @@ import {
   GENERATED_ASSETS
 } from './data/masterSpecScript';
 import { resolveGoogleMapsRating } from './lib/googleMapsRating';
-import { MasterScriptView } from './components/MasterScriptView';
-import { MarketplaceAndFlyerView } from './components/MarketplaceAndFlyerView';
-import { OwnerDashboardView } from './components/OwnerDashboardView';
-import { PilotDashboardView, SlotCreateDraft } from './components/PilotDashboardView';
-import { PartnerDashboardView } from './components/PartnerDashboardView';
-import { SecurityAuditView } from './components/SecurityAuditView';
+// Performance: heavy workspace views are lazy-loaded so the initial bundle only
+// contains the marketplace shell (Leaflet map, PDF receipt engine, dashboards
+// and other view-only code are fetched on demand when a tab is first opened).
+const MasterScriptView = React.lazy(() =>
+  import('./components/MasterScriptView').then((m) => ({ default: m.MasterScriptView }))
+);
+const MarketplaceAndFlyerView = React.lazy(() =>
+  import('./components/MarketplaceAndFlyerView').then((m) => ({ default: m.MarketplaceAndFlyerView }))
+);
+const OwnerDashboardView = React.lazy(() =>
+  import('./components/OwnerDashboardView').then((m) => ({ default: m.OwnerDashboardView }))
+);
+const PilotDashboardView = React.lazy(() =>
+  import('./components/PilotDashboardView').then((m) => ({ default: m.PilotDashboardView }))
+);
+const PartnerDashboardView = React.lazy(() =>
+  import('./components/PartnerDashboardView').then((m) => ({ default: m.PartnerDashboardView }))
+);
+const SecurityAuditView = React.lazy(() =>
+  import('./components/SecurityAuditView').then((m) => ({ default: m.SecurityAuditView }))
+);
+import type { SlotCreateDraft } from './components/PilotDashboardView';
 import { AppLogo } from './components/AppLogo';
 
 export default function App() {
@@ -111,12 +127,34 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage((prev) => (prev === msg ? null : prev));
     }, 3500);
-  };
+  }, []);
+
+  // Keep a live ref so memoized handlers can read the latest state without
+  // re-creating on every render (avoids tearing down child memo optimizations).
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+  const bookingsRef = useRef(bookings);
+  bookingsRef.current = bookings;
+  const pilotPublicProfileRef = useRef(pilotPublicProfile);
+  pilotPublicProfileRef.current = pilotPublicProfile;
+
+  // Performance: O(1) lookups instead of repeated O(n) Array.find/filter passes
+  const slotById = useMemo(() => {
+    const map = new Map<string, FlightSlotData>();
+    slots.forEach((s) => map.set(s.slotId, s));
+    return map;
+  }, [slots]);
+
+  const bookingById = useMemo(() => {
+    const map = new Map<string, BookingData>();
+    bookings.forEach((b) => map.set(b.bookingId, b));
+    return map;
+  }, [bookings]);
 
   const getCurrentTimestampStr = () => {
     const now = new Date();
@@ -343,7 +381,7 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
   // ============================================================================
 
   // 1. Business Information -> Publishes to Public Profile & /pilotProfiles/{uid}
-  const handleUpdateBusinessInfo = async (info: PilotBusinessInfo) => {
+  const handleUpdateBusinessInfo = useCallback(async (info: PilotBusinessInfo) => {
     const cleanCompany = sanitizeText(info.companyName, 100, 'Swiss Paragliding Interlaken AG');
     const resolvedGoogle = resolveGoogleMapsRating(info.googleMapsUrl, cleanCompany);
 
@@ -416,10 +454,10 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
     showToast(
       `Published Business Info & Auto-Pulled Google Rating (${cleanInfo.googleRating.toFixed(1)} ★ · ${cleanInfo.googleReviewCount} reviews) to Public Pilot Cards`
     );
-  };
+  }, [currentUser, showToast]);
 
   // 2. Banking Detail -> Strictly Private (/pilotProfiles/{uid}/private/banking) — NEVER published
-  const handleUpdatePrivateBanking = async (banking: PilotBankingPrivateData) => {
+  const handleUpdatePrivateBanking = useCallback(async (banking: PilotBankingPrivateData) => {
     const cleanBanking: PilotBankingPrivateData = {
       pilotId: currentUser ? sanitizeId(currentUser.uid) : banking.pilotId,
       accountHolderName: sanitizeText(banking.accountHolderName, 100),
@@ -435,19 +473,20 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
       try {
         const uid = sanitizeId(currentUser.uid);
         // Ensure parent public profile exists per Pillar 7 parent verification rule
+        const biz = pilotPublicProfileRef.current.businessInfo;
         await setDoc(doc(db, 'pilotProfiles', uid), {
           pilotId: uid,
-          companyName: pilotPublicProfile.businessInfo.companyName,
-          tagline: pilotPublicProfile.businessInfo.tagline,
-          bio: pilotPublicProfile.businessInfo.bio,
-          headquarters: pilotPublicProfile.businessInfo.headquarters,
-          countryCode: pilotPublicProfile.businessInfo.countryCode,
-          publicEmail: pilotPublicProfile.businessInfo.publicEmail,
-          publicPhone: pilotPublicProfile.businessInfo.publicPhone,
-          websiteUrl: pilotPublicProfile.businessInfo.websiteUrl,
-          uidVatNumber: pilotPublicProfile.businessInfo.uidVatNumber,
-          insuranceProvider: pilotPublicProfile.businessInfo.insuranceProvider,
-          policyNumber: pilotPublicProfile.businessInfo.policyNumber,
+          companyName: biz.companyName,
+          tagline: biz.tagline,
+          bio: biz.bio,
+          headquarters: biz.headquarters,
+          countryCode: biz.countryCode,
+          publicEmail: biz.publicEmail,
+          publicPhone: biz.publicPhone,
+          websiteUrl: biz.websiteUrl,
+          uidVatNumber: biz.uidVatNumber,
+          insuranceProvider: biz.insuranceProvider,
+          policyNumber: biz.policyNumber,
           updatedAt: serverTimestamp()
         });
 
@@ -472,10 +511,10 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
 
     setPilotPrivateBanking(cleanBanking);
     showToast('Saved IBAN & Banking Details to Private Vault (Excluded from Public Profile)');
-  };
+  }, [currentUser, pilotPublicProfileRef, showToast]);
 
   // 3. Take Off & Landing Spots -> Publishes to Public Profile
-  const handleAddSpot = async (spot: TakeOffLandingSpot) => {
+  const handleAddSpot = useCallback(async (spot: TakeOffLandingSpot) => {
     setPilotPublicProfile((prev) => ({
       ...prev,
       spots: [spot, ...prev.spots],
@@ -484,9 +523,9 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
     showToast(
       `Published Launch & Landing Spot "${spot.spotName}" (with Collection & Drop-Off Points) to Public Profile`
     );
-  };
+  }, [showToast]);
 
-  const handleUpdateSpot = async (updatedSpot: TakeOffLandingSpot) => {
+  const handleUpdateSpot = useCallback(async (updatedSpot: TakeOffLandingSpot) => {
     setPilotPublicProfile((prev) => ({
       ...prev,
       spots: prev.spots.map((s) => (s.spotId === updatedSpot.spotId ? updatedSpot : s)),
@@ -495,19 +534,19 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
     showToast(
       `Updated "${updatedSpot.spotName}" Collection & Drop-Off Points on Public Profile`
     );
-  };
+  }, [showToast]);
 
-  const handleDeleteSpot = async (spotId: string) => {
+  const handleDeleteSpot = useCallback(async (spotId: string) => {
     setPilotPublicProfile((prev) => ({
       ...prev,
       spots: prev.spots.filter((s) => s.spotId !== spotId),
       lastPublishedAt: getCurrentTimestampStr()
     }));
     showToast('Removed Spot from Public Profile');
-  };
+  }, [showToast]);
 
   // 5. Pilots Roster -> Publishes to Public Profile
-  const handleAddPilotMembers = async (members: TeamPilotMember[]) => {
+  const handleAddPilotMembers = useCallback(async (members: TeamPilotMember[]) => {
     setPilotPublicProfile((prev) => {
       const enrichedMembers = members.map((m) => ({
         ...m,
@@ -524,9 +563,9 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
     showToast(
       `Published ${members.length} Tandem Pilot Profile(s) with Photos & Google Ratings to Public Profile`
     );
-  };
+  }, [showToast]);
 
-  const handleUpdatePilotMemberPhoto = async (memberId: string, photoUrl: string) => {
+  const handleUpdatePilotMemberPhoto = useCallback(async (memberId: string, photoUrl: string) => {
     setPilotPublicProfile((prev) => ({
       ...prev,
       pilots: prev.pilots.map((m) =>
@@ -535,9 +574,9 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
       lastPublishedAt: getCurrentTimestampStr()
     }));
     showToast('Updated Pilot Profile Photo on Public Profile');
-  };
+  }, [showToast]);
 
-  const handleTogglePilotMemberStatus = async (memberId: string) => {
+  const handleTogglePilotMemberStatus = useCallback(async (memberId: string) => {
     setPilotPublicProfile((prev) => ({
       ...prev,
       pilots: prev.pilots.map((m) =>
@@ -548,19 +587,19 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
       lastPublishedAt: getCurrentTimestampStr()
     }));
     showToast('Updated Pilot Duty Status on Public Profile');
-  };
+  }, [showToast]);
 
-  const handleDeletePilotMember = async (memberId: string) => {
+  const handleDeletePilotMember = useCallback(async (memberId: string) => {
     setPilotPublicProfile((prev) => ({
       ...prev,
       pilots: prev.pilots.filter((m) => m.memberId !== memberId),
       lastPublishedAt: getCurrentTimestampStr()
     }));
     showToast('Removed Pilot from Public Profile Roster');
-  };
+  }, [showToast]);
 
   // 6. Images & Videos -> Publishes to Public Profile
-  const handleAddMediaItem = async (item: PilotMediaItem) => {
+  const handleAddMediaItem = useCallback(async (item: PilotMediaItem) => {
     setPilotPublicProfile((prev) => {
       const updatedExisting = item.isHeaderImage
         ? prev.mediaGallery.map((m) => ({ ...m, isHeaderImage: false }))
@@ -576,9 +615,9 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
         ? `Published "${item.title}" & Set as Public Page Header Image`
         : `Published ${item.mediaType.toUpperCase()} "${item.title}" to Public Profile`
     );
-  };
+  }, [showToast]);
 
-  const handleSetHeaderMediaItem = async (mediaId: string) => {
+  const handleSetHeaderMediaItem = useCallback(async (mediaId: string) => {
     setPilotPublicProfile((prev) => ({
       ...prev,
       mediaGallery: prev.mediaGallery.map((m) => ({
@@ -588,19 +627,19 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
       lastPublishedAt: getCurrentTimestampStr()
     }));
     showToast('Updated Active Public Page Header Image');
-  };
+  }, [showToast]);
 
-  const handleDeleteMediaItem = async (mediaId: string) => {
+  const handleDeleteMediaItem = useCallback(async (mediaId: string) => {
     setPilotPublicProfile((prev) => ({
       ...prev,
       mediaGallery: prev.mediaGallery.filter((m) => m.mediaId !== mediaId),
       lastPublishedAt: getCurrentTimestampStr()
     }));
     showToast('Removed Media Item from Public Profile Gallery');
-  };
+  }, [showToast]);
 
   // Registration handler for pilot / operator sign up from home page
-  const handleRegisterPilotOperator = async (payload: PilotOperatorRegistrationPayload) => {
+  const handleRegisterPilotOperator = useCallback(async (payload: PilotOperatorRegistrationPayload) => {
     const cleanCompany = sanitizeText(payload.companyName, 100, 'Alpine Tandem Flight Operations AG');
     const cleanPilot = sanitizeText(payload.leadPilotName, 80, 'Chief Pilot');
     const cleanLicense = sanitizeText(payload.shvLicense, 40, 'SHV-CH-50000');
@@ -678,10 +717,10 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
 
     setActiveView('pilot_dashboard');
     showToast(`Welcome ${cleanPilot}! Your operation "${cleanCompany}" is registered. Configure your business details below.`);
-  };
+  }, [showToast]);
 
   // Partner QR Registration Handler (routes directly to unique Partner QR dashboard)
-  const handleRegisterPartner = async (payload: PartnerRegistrationPayload) => {
+  const handleRegisterPartner = useCallback(async (payload: PartnerRegistrationPayload) => {
     const campaignId = sanitizeId(`qr_${Date.now()}`);
     const ownerId = currentUser ? sanitizeId(currentUser.uid) : `partner_${Date.now()}`;
     const cleanCode = validatePartnerCode(
@@ -725,18 +764,18 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
     showToast(
       `Welcome ${payload.contactName || payload.partnerName}! Your venue "${payload.partnerName}" is registered with code ${cleanCode}. Welcome to your Partner QR Dashboard.`
     );
-  };
+  }, [currentUser, showToast]);
 
   // Marketplace & Escrow Handlers
-  const handleApplyPartnerCode = (code: string) => {
+  const handleApplyPartnerCode = useCallback((code: string) => {
     const clean = validatePartnerCode(code);
     setActivePartnerCode(clean);
     localStorage.setItem('2paraglide_partner_ref', clean);
     showToast(`Active QR Referral Code set to ${clean}`);
-  };
+  }, [showToast]);
 
   // Pre-Flight Digital Waiver Firestore Persistence Handler
-  const handleSubmitWaiver = async (waiver: DigitalWaiverData) => {
+  const handleSubmitWaiver = useCallback(async (waiver: DigitalWaiverData) => {
     // 1. Update local state
     setWaivers((prev) => {
       const next = new Map(prev);
@@ -791,9 +830,9 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
     showToast(
       `Digital Legal Waiver signed & stored in Firestore for Booking #${waiver.bookingId}`
     );
-  };
+  }, [currentUser, showToast]);
 
-  const handleCreateBooking = async (params: CreateBookingPayload) => {
+  const handleCreateBooking = useCallback(async (params: CreateBookingPayload) => {
     const bookingId = sanitizeId(`book_${Date.now()}`);
     const flyerId = currentUser ? sanitizeId(currentUser.uid) : 'demo_flyer_guest';
     const cleanFlyerName = sanitizeText(params.flyerName, 80, 'Alpine Flyer');
@@ -936,13 +975,14 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
         ? `Payment successful! Flight #${bookingId} confirmed & waiver signed — routed to your Flyer Dashboard`
         : `Payment successful! Flight #${bookingId} confirmed in Escrow — routed to your Flyer Dashboard`
     );
-  };
+  }, [currentUser, showToast]);
 
-  const handleUpdateBookingStatus = async (
-    bookingId: string,
-    nextStatus: 'completed' | 'cancelled'
-  ) => {
-    const target = bookings.find((b) => b.bookingId === bookingId);
+  const handleUpdateBookingStatus = useCallback(
+    async (
+      bookingId: string,
+      nextStatus: 'completed' | 'cancelled'
+    ) => {
+    const target = bookingById.get(bookingId);
     if (!target) return;
 
     if (
@@ -970,10 +1010,10 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
         ? `Flight #${bookingId} marked landed — 3-way escrow payouts released`
         : `Booking #${bookingId} cancelled — 100% escrow refunded to flyer`
     );
-  };
+  }, [currentUser, bookingById, showToast]);
 
   // 4. Calendar / Slots -> Publishes Single or Simultaneous Multi-Pilot Batch to Public Profile & Marketplace
-  const handleCreateSlotsBatch = async (drafts: SlotCreateDraft[]) => {
+  const handleCreateSlotsBatch = useCallback(async (drafts: SlotCreateDraft[]) => {
     const pilotId = currentUser ? sanitizeId(currentUser.uid) : 'demo_pilot_wyss';
     const createdSlots: FlightSlotData[] = [];
 
@@ -1040,10 +1080,10 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
     showToast(
       `Published ${createdSlots.length} Tandem Flight Slot(s) to Public Calendar & Profile`
     );
-  };
+  }, [currentUser, showToast]);
 
-  const handleUpdateSlotWeather = async (slotId: string, weatherStatus: WeatherStatus) => {
-    const target = slots.find((s) => s.slotId === slotId);
+  const handleUpdateSlotWeather = useCallback(async (slotId: string, weatherStatus: WeatherStatus) => {
+    const target = slotById.get(slotId);
     if (!target) return;
 
     if (
@@ -1092,16 +1132,17 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
       lastPublishedAt: getCurrentTimestampStr()
     }));
     showToast(`Updated weather status for ${target.locationName} to ${weatherStatus.toUpperCase()}`);
-  };
+  }, [currentUser, slotById, showToast]);
 
   // Automated Location-wide Weather Controller & Notification Dispatcher
-  const handleUpdateLocationWeather = async (
-    locationName: string,
-    weatherStatus: WeatherStatus,
-    customReason?: string
-  ) => {
+  const handleUpdateLocationWeather = useCallback(
+    async (
+      locationName: string,
+      weatherStatus: WeatherStatus,
+      customReason?: string
+    ) => {
     const locLower = locationName.toLowerCase().trim();
-    const matchingSlots = slots.filter(
+    const matchingSlots = slotsRef.current.filter(
       (s) =>
         s.locationName.toLowerCase().includes(locLower) ||
         locLower.includes(s.locationName.toLowerCase())
@@ -1184,26 +1225,27 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
       ...prev,
       lastPublishedAt: getCurrentTimestampStr()
     }));
-  };
+  }, [currentUser, slotsRef, showToast]);
 
-  const handleAcknowledgeAlert = (alertId: string) => {
+  const handleAcknowledgeAlert = useCallback((alertId: string) => {
     setWeatherAlerts((prev) =>
       prev.map((a) => (a.alertId === alertId ? { ...a, acknowledged: true } : a))
     );
     showToast('Weather notification acknowledged by Pilot Safety Officer.');
-  };
+  }, [showToast]);
 
-  const handleDismissAlert = (alertId: string) => {
+  const handleDismissAlert = useCallback((alertId: string) => {
     setWeatherAlerts((prev) => prev.filter((a) => a.alertId !== alertId));
-  };
+  }, []);
 
-  const handleCreateQrCampaign = async (draft: {
-    partnerName: string;
-    partnerType: PartnerVenueType;
-    partnerCode: string;
-    region: string;
-    countryCode: string;
-  }) => {
+  const handleCreateQrCampaign = useCallback(
+    async (draft: {
+      partnerName: string;
+      partnerType: PartnerVenueType;
+      partnerCode: string;
+      region: string;
+      countryCode: string;
+    }) => {
     const campaignId = sanitizeId(`qr_${Date.now()}`);
     const ownerId = currentUser ? sanitizeId(currentUser.uid) : 'demo_partner_owner';
     const cleanCode = validatePartnerCode(draft.partnerCode);
@@ -1236,9 +1278,9 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
 
     setQrCampaigns((prev) => [newCampaign, ...prev]);
     showToast(`Created QR Campaign ${cleanCode} for ${newCampaign.partnerName}`);
-  };
+  }, [currentUser, showToast]);
 
-  const handleSimulateQrScan = async (campaign: QrCampaignData) => {
+  const handleSimulateQrScan = useCallback(async (campaign: QrCampaignData) => {
     setQrCampaigns((prev) =>
       prev.map((c) =>
         c.campaignId === campaign.campaignId
@@ -1247,17 +1289,26 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
       )
     );
     handleApplyPartnerCode(campaign.partnerCode);
-  };
+  }, [handleApplyPartnerCode]);
 
-  const handleToggleCountryStatus = (
-    countryCode: string,
-    nextStatus: CountryExpansionConfig['status']
-  ) => {
+  const handleToggleCountryStatus = useCallback(
+    (countryCode: string, nextStatus: CountryExpansionConfig['status']) => {
     setCountries((prev) =>
       prev.map((c) => (c.countryCode === countryCode ? { ...c, status: nextStatus } : c))
     );
     showToast(`Updated ${countryCode} market status to ${nextStatus.toUpperCase()}`);
-  };
+  }, [showToast]);
+
+  // Performance: stable factory for inline callbacks passed to memoized views,
+  // so child React.memo comparisons don't break on every App re-render.
+  const makeViewCallbacks = useCallback(
+    () => ({
+      onCancelBooking: (bookingId: string) =>
+        handleUpdateBookingStatus(bookingId, 'cancelled'),
+      onNavigate: setActiveView
+    }),
+    [handleUpdateBookingStatus]
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-[#111111] text-[#FFFFFF]">
@@ -1428,10 +1479,18 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
 
       {/* Main Content Viewport */}
       <main className="flex-1">
+        <React.Suspense
+          fallback={
+            <div className="max-w-[1280px] mx-auto px-6 py-20 text-center text-xs font-mono text-[#8A8A8A] animate-pulse">
+              Loading workspace module…
+            </div>
+          }
+        >
         {activeView === 'script' && <MasterScriptView onNavigate={setActiveView} />}
 
         {(activeView === 'marketplace' || activeView === 'flyer_dashboard') && (
           <MarketplaceAndFlyerView
+            {...makeViewCallbacks()}
             mode={activeView}
             slots={slots}
             bookings={bookings}
@@ -1440,8 +1499,6 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
             activePartnerCode={activePartnerCode}
             onApplyPartnerCode={handleApplyPartnerCode}
             onCreateBooking={handleCreateBooking}
-            onCancelBooking={(bookingId) => handleUpdateBookingStatus(bookingId, 'cancelled')}
-            onNavigate={setActiveView}
             currentUserName={currentUser?.displayName || 'Elena Rossi'}
             waivers={waivers}
             onSubmitWaiver={handleSubmitWaiver}
@@ -1464,6 +1521,7 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
 
         {activeView === 'pilot_dashboard' && (
           <PilotDashboardView
+            {...makeViewCallbacks()}
             slots={slots}
             bookings={bookings}
             publicProfile={pilotPublicProfile}
@@ -1488,16 +1546,17 @@ const SEED_WEATHER_ALERTS: WeatherAlertNotification[] = [
 
         {activeView === 'partner_dashboard' && (
           <PartnerDashboardView
+            {...makeViewCallbacks()}
             qrCampaigns={qrCampaigns}
             bookings={bookings}
             initialCampaignId={selectedPartnerCampaignId}
             onCreateQrCampaign={handleCreateQrCampaign}
             onSimulateQrScan={handleSimulateQrScan}
-            onNavigate={setActiveView}
           />
         )}
 
         {activeView === 'security_audit' && <SecurityAuditView />}
+        </React.Suspense>
       </main>
 
       {/* Quiet Footer */}

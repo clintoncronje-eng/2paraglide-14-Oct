@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   FlightSlotData,
   BookingData,
@@ -79,7 +79,7 @@ interface MarketplaceAndFlyerViewProps {
   weatherAlerts?: WeatherAlertNotification[];
 }
 
-export const MarketplaceAndFlyerView: React.FC<MarketplaceAndFlyerViewProps> = ({
+const MarketplaceAndFlyerViewInner: React.FC<MarketplaceAndFlyerViewProps> = ({
   mode,
   slots,
   bookings,
@@ -322,14 +322,28 @@ export const MarketplaceAndFlyerView: React.FC<MarketplaceAndFlyerViewProps> = (
     }
   };
 
-  const availableSlots = slots.filter((slot) => {
-    const matchesCountry = countryFilter === 'ALL' || slot.countryCode === countryFilter;
-    const matchesQuery =
-      !searchQuery.trim() ||
-      slot.locationName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      slot.pilotName.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCountry && matchesQuery;
-  });
+  // Performance: memoized filtering avoids re-scanning all slots on every render
+  // (e.g., while typing in unrelated form fields or drawing the waiver canvas).
+  const availableSlots = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return slots.filter((slot) => {
+      const matchesCountry = countryFilter === 'ALL' || slot.countryCode === countryFilter;
+      const matchesQuery =
+        !q ||
+        slot.locationName.toLowerCase().includes(q) ||
+        slot.pilotName.toLowerCase().includes(q);
+      return matchesCountry && matchesQuery;
+    });
+  }, [slots, countryFilter, searchQuery]);
+
+  // Performance: one pass over bookings for waiver progress stats
+  const waiverStats = useMemo(() => {
+    let signedCount = 0;
+    for (const b of bookings) {
+      if (b.waiverSigned || waivers?.has(b.bookingId)) signedCount++;
+    }
+    return { signedCount, total: bookings.length };
+  }, [bookings, waivers]);
 
   const resolveSlotImage = (slot: FlightSlotData) => {
     if (
@@ -1281,7 +1295,7 @@ export const MarketplaceAndFlyerView: React.FC<MarketplaceAndFlyerViewProps> = (
                   <FileCheck2 className="w-4 h-4 text-[#E62B1E]" />
                   <span className="text-[#8A8A8A]">Waivers Signed:</span>
                   <span className="text-[#FFFFFF] font-bold">
-                    {bookings.filter((b) => b.waiverSigned || waivers?.has(b.bookingId)).length} / {bookings.length}
+                    {waiverStats.signedCount} / {waiverStats.total}
                   </span>
                 </div>
               )}
@@ -2516,3 +2530,6 @@ export const MarketplaceAndFlyerView: React.FC<MarketplaceAndFlyerViewProps> = (
     </div>
   );
 };
+
+// Performance: skip re-renders when unrelated App state (toasts, tab switches) changes
+export const MarketplaceAndFlyerView = React.memo(MarketplaceAndFlyerViewInner);

@@ -1,7 +1,7 @@
 import React from 'react';
 import { DIRTY_DOZEN_TEST_CASES } from '../../firestore.rules.test';
 
-export const SecurityAuditView: React.FC = () => {
+const SecurityAuditViewInner: React.FC = () => {
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-10 space-y-12">
       {/* Header */}
@@ -104,3 +104,6 @@ export const SecurityAuditView: React.FC = () => {
     </div>
   );
 };
+
+// Performance: static view — memoize to avoid needless re-renders
+export const SecurityAuditView = React.memo(SecurityAuditViewInner);

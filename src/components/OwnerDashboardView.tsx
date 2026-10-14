@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   BookingData,
   CountryExpansionConfig,
@@ -33,7 +33,7 @@ interface PilotVerificationEntry {
   verified: boolean;
 }
 
-export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
+const OwnerDashboardViewInner: React.FC<OwnerDashboardViewProps> = ({
   bookings,
   qrCampaigns,
   countries,
@@ -80,14 +80,32 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     }
   ]);
 
-  const activeBookings = bookings.filter((b) => b.status !== 'cancelled');
-  const totalGmvCents = activeBookings.reduce((sum, b) => sum + b.totalAmountCents, 0);
-  const totalPlatformFeeCents = activeBookings.reduce((sum, b) => sum + b.platformFeeCents, 0);
-  const totalPilotEscrowCents = activeBookings.reduce((sum, b) => sum + b.pilotPayoutCents, 0);
-  const totalPartnerCommCents = activeBookings.reduce((sum, b) => sum + b.partnerCommissionCents, 0);
+  // Performance: aggregate all escrow KPIs in a single O(n) pass instead of five
+  // separate reduce passes plus an intermediate filter allocation.
+  const kpis = useMemo(() => {
+    let gmv = 0;
+    let platformFee = 0;
+    let pilotEscrow = 0;
+    let partnerComm = 0;
+    let active = 0;
+    for (const b of bookings) {
+      active++;
+      if (b.status === 'cancelled') continue;
+      gmv += b.totalAmountCents;
+      platformFee += b.platformFeeCents;
+      pilotEscrow += b.pilotPayoutCents;
+      partnerComm += b.partnerCommissionCents;
+    }
+    return { gmv, platformFee, pilotEscrow, partnerComm, activeCount: active };
+  }, [bookings]);
+  const totalGmvCents = kpis.gmv;
+  const totalPlatformFeeCents = kpis.platformFee;
+  const totalPilotEscrowCents = kpis.pilotEscrow;
+  const totalPartnerCommCents = kpis.partnerComm;
 
-  const filteredBookings = bookings.filter(
-    (b) => ledgerFilter === 'ALL' || b.status === ledgerFilter
+  const filteredBookings = useMemo(
+    () => bookings.filter((b) => ledgerFilter === 'ALL' || b.status === ledgerFilter),
+    [bookings, ledgerFilter]
   );
 
   const handleTogglePilotVerify = (pilotId: string) => {
@@ -419,3 +437,6 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     </div>
   );
 };
+
+// Performance: skip re-renders when unrelated App state changes
+export const OwnerDashboardView = React.memo(OwnerDashboardViewInner);

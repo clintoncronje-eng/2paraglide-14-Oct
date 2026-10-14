@@ -23,7 +23,7 @@ interface PartnerDashboardViewProps {
   onNavigate: (view: WorkspaceView) => void;
 }
 
-export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({
+const PartnerDashboardViewInner: React.FC<PartnerDashboardViewProps> = ({
   qrCampaigns,
   bookings,
   initialCampaignId,
@@ -440,3 +440,6 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({
     </div>
   );
 };
+
+// Performance: static/lightweight view — memoize to avoid needless re-renders
+export const PartnerDashboardView = React.memo(PartnerDashboardViewInner);

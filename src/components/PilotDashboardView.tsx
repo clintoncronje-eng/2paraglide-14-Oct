@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { updatePassword } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import {
@@ -127,7 +127,7 @@ interface PilotDashboardViewProps {
   onDismissAlert?: (alertId: string) => void;
 }
 
-export const PilotDashboardView: React.FC<PilotDashboardViewProps> = ({
+const PilotDashboardViewInner: React.FC<PilotDashboardViewProps> = ({
   slots,
   bookings,
   publicProfile,
@@ -703,11 +703,16 @@ export const PilotDashboardView: React.FC<PilotDashboardViewProps> = ({
     ? `${bankForm.iban.slice(0, 7)} •••• •••• •••• ${bankForm.iban.slice(-4)}`
     : '';
 
-  const filteredCalendarSlots = slots.filter(
-    (s) => calendarDateFilter === 'ALL' || s.flightDate === calendarDateFilter
+  // Performance: cache derived lists so slot tables aren't rebuilt on every keystroke
+  const filteredCalendarSlots = useMemo(
+    () => slots.filter((s) => calendarDateFilter === 'ALL' || s.flightDate === calendarDateFilter),
+    [slots, calendarDateFilter]
   );
 
-  const uniqueDates = Array.from(new Set(slots.map((s) => s.flightDate))).sort();
+  const uniqueDates = useMemo(
+    () => Array.from(new Set(slots.map((s) => s.flightDate))).sort(),
+    [slots]
+  );
 
   const pwdHasMinLen = newPassword.length >= 12;
   const pwdHasUpper = /[A-Z]/.test(newPassword);
@@ -3388,3 +3393,6 @@ export const PilotDashboardView: React.FC<PilotDashboardViewProps> = ({
     </div>
   );
 };
+
+// Performance: skip re-renders when unrelated App state changes
+export const PilotDashboardView = React.memo(PilotDashboardViewInner);

@@ -6,6 +6,11 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      // Single-file builds: bundle every lazy chunk into one artifact
+      rollupOptions: { output: { inlineDynamicImports: true } },
+      assetsInlineLimit: Number.MAX_SAFE_INTEGER,
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
